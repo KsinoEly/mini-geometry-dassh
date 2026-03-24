@@ -81,7 +81,7 @@ let jumpPressed=false;
 let skinColor="#00ffff";
 let particles=[];
 
-// SKINS
+// SKINS (incluye rojo)
 const skinList=["#00ffff","#ff0066","#00ff00","#ffff00","#ff9900","#ff0000"];
 const skinsDiv=document.getElementById("skins");
 
@@ -115,7 +115,7 @@ menuBtn.style.display="none";
 function pauseGame(){paused=true;pauseMenu.style.display="flex";}
 function resume(){paused=false;pauseMenu.style.display="none";}
 
-// 💥 EXPLOSION CUADRADOS
+// EXPLOSION
 function explode(x,y){
 for(let i=0;i<80;i++){
 particles.push({
@@ -149,7 +149,19 @@ menuBtn.style.display="block";
 
 resize();
 
-player={x:120,y:0,size:50,dy:0,gravity:0.75,jump:-15,grounded:false,rotation:0};
+speed=1; // 🔥 velocidad fija siempre
+
+player={
+x:120,
+y:0,
+size:50,
+dy:0,
+gravity:0.75,
+jump:-18, // 🔥 salto más alto
+grounded:false,
+rotation:0,
+jumps:0 // 🔥 doble salto
+};
 
 cameraX=0;
 level=[];
@@ -178,8 +190,10 @@ let ground=canvas.height-80;
 // FISICA
 player.dy+=player.gravity;
 
-if(jumpPressed && player.grounded){
+// 🔥 DOBLE SALTO
+if(jumpPressed && player.jumps < 2){
 player.dy=player.jump;
+player.jumps++;
 jumpPressed=false;
 }
 
@@ -190,6 +204,7 @@ player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
 player.rotation=0;
+player.jumps=0; // reset salto
 }else{
 player.grounded=false;
 player.rotation+=0.15;
@@ -224,21 +239,20 @@ ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-// 💀 MUERTE
+// MUERTE
 if(alive && collide(player,x,y)){
 alive=false;
 explode(player.x+25,player.y+25);
 pauseBtn.style.display="none";
 menuBtn.style.display="none";
 
-// mostrar game over
 setTimeout(()=>{
 gameOver.style.display="flex";
 },400);
 }
 });
 
-// 💥 PARTICULAS
+// PARTICULAS
 particles.forEach((p,i)=>{
 p.x+=p.dx;
 p.y+=p.dy;
