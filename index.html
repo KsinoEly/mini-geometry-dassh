@@ -6,7 +6,7 @@
 <title>Mini Geometry Dash</title>
 
 <style>
-body{margin:0;background:black;overflow:hidden;font-family:Arial;}
+body{margin:0;background:black;overflow:hidden;}
 canvas{display:block;}
 #menu{text-align:center;color:white;padding-top:40px;}
 button{padding:10px;margin:5px;border:none;border-radius:8px;}
@@ -14,7 +14,7 @@ button{padding:10px;margin:5px;border:none;border-radius:8px;}
 #retry{
 position:absolute;top:50%;left:50%;
 transform:translate(-50%,-50%);
-display:none;font-size:20px;
+display:none;
 }
 </style>
 </head>
@@ -41,67 +41,57 @@ canvas.height=window.innerHeight;
 }
 window.addEventListener("resize",resize);
 
-let player,level,portals;
+let player,level;
 let cameraX,speed,alive,paused;
-let particles=[];
 let gravityDir=1;
-let holding=false;
+let jumpPressed=false;
+let particles=[];
 
-const HITBOX_SCALE = 0.8;
+const HITBOX_SCALE=0.8;
 
-// 🎯 NIVEL CON TIMING REAL
+// NIVEL
 function createLevel(){
 let lvl=[];
 let x=1400;
 
-// intro
-lvl.push({x:x,h:60}); x+=800;
-
-// ritmo base
-lvl.push({x:x,h:70}); x+=500;
-lvl.push({x:x,h:70}); x+=500;
-
-// doble salto
-lvl.push({x:x,h:90}); x+=300;
-lvl.push({x:x,h:90}); x+=700;
-
-// sección rápida
-for(let i=0;i<5;i++){
-lvl.push({x:x,h:80});
-x+=350;
-}
-
-// difícil
-for(let i=0;i<6;i++){
-lvl.push({x:x,h:100});
-x+=300;
-}
+for(let i=0;i<3;i++){lvl.push({x:x,h:60}); x+=800;}
+for(let i=0;i<5;i++){lvl.push({x:x,h:70}); x+=500;}
+for(let i=0;i<6;i++){lvl.push({x:x,h:100}); x+=300;}
 
 return lvl;
 }
 
+// INPUT CORRECTO
+window.addEventListener("mousedown",()=>jumpPressed=true);
+window.addEventListener("touchstart",()=>jumpPressed=true);
+window.addEventListener("keydown",e=>{
+if(e.code==="Space") jumpPressed=true;
+});
+
 // TRIANGULO
 function pointInTriangle(px,py, ax,ay, bx,by, cx,cy){
-let area = (bx-ax)*(cy-ay)-(cx-ax)*(by-ay);
-let s = ((ay-cy)*(px-cx)+(cx-ax)*(py-cy))/area;
-let t = ((cy-by)*(px-cx)+(bx-cx)*(py-cy))/area;
+let area=(bx-ax)*(cy-ay)-(cx-ax)*(by-ay);
+let s=((ay-cy)*(px-cx)+(cx-ax)*(py-cy))/area;
+let t=((cy-by)*(px-cx)+(bx-cx)*(py-cy))/area;
 return s>=0 && t>=0 && (s+t)<=1;
 }
 
 function getHitbox(p){
-let size = p.size * HITBOX_SCALE;
-let offset = (p.size - size)/2;
+let size=p.size*HITBOX_SCALE;
+let offset=(p.size-size)/2;
 return {x:p.x+offset,y:p.y+offset,size:size};
 }
 
-function collideTriangle(player, tri){
+function collideTriangle(player,tri){
 let hb=getHitbox(player);
+
 let pts=[
 {x:hb.x,y:hb.y},
 {x:hb.x+hb.size,y:hb.y},
 {x:hb.x,y:hb.y+hb.size},
 {x:hb.x+hb.size,y:hb.y+hb.size}
 ];
+
 for(let p of pts){
 if(pointInTriangle(p.x,p.y,tri.x1,tri.y1,tri.x2,tri.y2,tri.x3,tri.y3)){
 return true;
@@ -114,7 +104,7 @@ return false;
 function startGame(){
 
 cameraX=0;
-speed=1; // 🔥 VELOCIDAD FIJA REAL
+speed=1;
 alive=true;
 paused=false;
 particles=[];
@@ -122,104 +112,59 @@ gravityDir=1;
 
 document.getElementById("retry").style.display="none";
 document.getElementById("menu").style.display="none";
-canvas.style.display="block";
-document.getElementById("pauseBtn").style.display="block";
 
 resize();
 
 player={
 x:120,y:0,size:50,dy:0,
-gravity:0.75,
-jump:-15,
-grounded:false,
-rotation:0,
-mode:"cube"
+gravity:0.75,jump:-15,
+grounded:false,rotation:0
 };
 
 level=createLevel();
 
-portals=[
-{x:3500,type:"gravity"},
-{x:5500,type:"ship"},
-{x:7500,type:"gravity"},
-{x:9000,type:"cube"}
-];
-
 game();
 }
-
-// INPUT
-window.addEventListener("mousedown",()=>holding=true);
-window.addEventListener("mouseup",()=>holding=false);
-window.addEventListener("touchstart",()=>holding=true);
-window.addEventListener("touchend",()=>holding=false);
-window.addEventListener("keydown",e=>{if(e.code==="Space")holding=true;});
-window.addEventListener("keyup",e=>{if(e.code==="Space")holding=false;});
 
 // LOOP
 function game(){
 
 if(paused){requestAnimationFrame(game);return;}
 
-// 🌈 FONDO ANIMADO
-let t=Date.now()*0.001;
-ctx.fillStyle=`hsl(${(t*40)%360},50%,10%)`;
+ctx.fillStyle="#111";
 ctx.fillRect(0,0,canvas.width,canvas.height);
+
+// velocidad fija por zona
+if(cameraX<3000) speed=1;
+else if(cameraX<6000) speed=1.08;
+else speed=1.15;
 
 cameraX+=speed*5;
 
 let ground=canvas.height-80;
 
-// 🚀 FISICA PRO
-if(player.mode==="cube"){
-player.dy+=player.gravity*gravityDir;
+// 🔥 SALTO CORREGIDO
+player.dy+=player.gravity;
 
-if(holding && player.grounded){
-player.dy=player.jump*gravityDir;
-spawnParticles(player.x,player.y);
-}
-}else{
-if(holding){
-player.dy-=0.6;
-}else{
-player.dy+=0.6;
-}
+if(jumpPressed && player.grounded){
+player.dy=player.jump;
+jumpPressed=false; // CLAVE
 }
 
 player.y+=player.dy;
 
-// suelo
 if(player.y+player.size>=ground){
 player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
-player.rotation=0;
 }else{
 player.grounded=false;
-player.rotation+=0.1;
 }
-
-// TRAIL
-particles.push({
-x:player.x+20,
-y:player.y+20,
-dx:(Math.random()-0.5)*2,
-dy:(Math.random()-0.5)*2,
-life:20
-});
 
 // PLAYER
 if(alive){
-ctx.save();
-ctx.translate(player.x+25,player.y+25);
-ctx.rotate(player.rotation);
-
-ctx.shadowBlur=30;
-ctx.shadowColor="#00ffff";
 ctx.fillStyle="#00ffff";
-ctx.fillRect(-25,-25,50,50);
-
-ctx.restore();
+ctx.fillRect(player.x,player.y,player.size,player.size);
 }
 
 // OBSTACULOS
@@ -228,20 +173,13 @@ let x=obs.x-cameraX;
 let y=ground-obs.h;
 
 ctx.fillStyle="#ff0066";
-ctx.shadowBlur=30;
-ctx.shadowColor="#ff0066";
-
 ctx.beginPath();
 ctx.moveTo(x,ground);
 ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-let tri={
-x1:x,y1:ground,
-x2:x+40,y2:y,
-x3:x+80,y3:ground
-};
+let tri={x1:x,y1:ground,x2:x+40,y2:y,x3:x+80,y3:ground};
 
 if(alive && collideTriangle(player,tri)){
 alive=false;
@@ -250,51 +188,17 @@ setTimeout(()=>{document.getElementById("retry").style.display="block";},300);
 }
 });
 
-// PORTALES
-portals.forEach(p=>{
-let x=p.x-cameraX;
-
-ctx.shadowBlur=40;
-ctx.strokeStyle=
-p.type==="gravity"?"yellow":
-p.type==="ship"?"lime":"cyan";
-
-ctx.beginPath();
-ctx.arc(x,canvas.height/2,35,0,Math.PI*2);
-ctx.stroke();
-
-if(alive && player.x<x+35 && player.x+player.size>x-35){
-if(p.type==="gravity") gravityDir*=-1;
-if(p.type==="ship") player.mode="ship";
-if(p.type==="cube") player.mode="cube";
-}
-});
-
 // PARTICULAS
 particles.forEach((p,i)=>{
 p.x+=p.dx;
 p.y+=p.dy;
 p.life--;
-
 ctx.fillStyle="cyan";
 ctx.fillRect(p.x,p.y,3,3);
-
 if(p.life<=0) particles.splice(i,1);
 });
 
 requestAnimationFrame(game);
-}
-
-// PARTICULAS SALTO
-function spawnParticles(x,y){
-for(let i=0;i<15;i++){
-particles.push({
-x,y,
-dx:(Math.random()-0.5)*4,
-dy:(Math.random()-0.5)*4,
-life:20
-});
-}
 }
 
 // EXPLOSION
