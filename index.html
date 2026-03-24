@@ -6,15 +6,25 @@
 <title>Mini Geometry Dash</title>
 
 <style>
-body{margin:0;background:black;overflow:hidden;}
-canvas{display:block;}
-#menu{text-align:center;color:white;padding-top:40px;}
-button{padding:10px;margin:5px;border:none;border-radius:8px;}
-#pauseBtn{position:fixed;top:10px;right:10px;}
-#retry{
-position:absolute;top:50%;left:50%;
-transform:translate(-50%,-50%);
-display:none;
+body{margin:0;background:black;font-family:Arial;}
+canvas{display:none;}
+#menu,#skinsMenu,#pauseMenu{
+position:absolute;width:100%;height:100%;
+display:flex;flex-direction:column;
+align-items:center;justify-content:center;
+color:white;
+}
+button{
+padding:12px 20px;margin:8px;
+border:none;border-radius:8px;
+font-size:16px;cursor:pointer;
+}
+#pauseBtn{position:fixed;top:10px;right:10px;display:none;}
+#menuBtn{position:fixed;top:10px;left:10px;display:none;}
+.skin{
+width:40px;height:40px;margin:5px;
+display:inline-block;cursor:pointer;
+border:2px solid white;
 }
 </style>
 </head>
@@ -22,12 +32,25 @@ display:none;
 <body>
 
 <div id="menu">
-<h1 style="color:white;">Mini Geometry Dash</h1>
+<h1>Mini Geometry Dash</h1>
 <button onclick="startGame()">JUGAR</button>
+<button onclick="openSkins()">SKINS</button>
 </div>
 
-<button id="pauseBtn" onclick="togglePause()" style="display:none;">⏸</button>
-<button id="retry" onclick="restart()">REINTENTAR</button>
+<div id="skinsMenu" style="display:none;">
+<h2>Elegir Skin</h2>
+<div id="skins"></div>
+<button onclick="backToMenu()">VOLVER</button>
+</div>
+
+<div id="pauseMenu" style="display:none;">
+<h2>PAUSA</h2>
+<button onclick="resume()">REANUDAR</button>
+<button onclick="goMenu()">MENÚ</button>
+</div>
+
+<button id="pauseBtn" onclick="pauseGame()">⏸</button>
+<button id="menuBtn" onclick="goMenu()">🏠</button>
 
 <canvas id="game"></canvas>
 
@@ -41,12 +64,33 @@ canvas.height=window.innerHeight;
 }
 window.addEventListener("resize",resize);
 
-let player,level=[],platforms=[],portals=[];
-let cameraX,speed,alive,paused,startTime;
+// VARIABLES
+let player,level=[],cameraX=0,speed=1;
+let alive=true,paused=false;
 let jumpPressed=false;
+let skinColor="#00ffff";
 let particles=[];
+let music=new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=arcade-113449.mp3");
+music.loop=true;
 
+// HITBOX
 const HITBOX_SCALE=0.8;
+
+// RITMO
+let pattern=[500,500,300,700,300,300,600,400];
+let patternIndex=0;
+
+// SKINS
+const skinList=["#00ffff","#ff0066","#00ff00","#ffff00","#ff9900"];
+const skinsDiv=document.getElementById("skins");
+
+skinList.forEach(color=>{
+let d=document.createElement("div");
+d.className="skin";
+d.style.background=color;
+d.onclick=()=>{skinColor=color;}
+skinsDiv.appendChild(d);
+});
 
 // INPUT
 window.addEventListener("mousedown",()=>jumpPressed=true);
@@ -54,6 +98,33 @@ window.addEventListener("touchstart",()=>jumpPressed=true);
 window.addEventListener("keydown",e=>{
 if(e.code==="Space") jumpPressed=true;
 });
+
+// MENUS
+function openSkins(){
+menu.style.display="none";
+skinsMenu.style.display="flex";
+}
+function backToMenu(){
+skinsMenu.style.display="none";
+menu.style.display="flex";
+}
+function goMenu(){
+paused=false;
+canvas.style.display="none";
+pauseMenu.style.display="none";
+menu.style.display="flex";
+pauseBtn.style.display="none";
+menuBtn.style.display="none";
+music.pause();
+}
+function pauseGame(){
+paused=true;
+pauseMenu.style.display="flex";
+}
+function resume(){
+paused=false;
+pauseMenu.style.display="none";
+}
 
 // TRIANGULO
 function pointInTriangle(px,py, ax,ay, bx,by, cx,cy){
@@ -63,6 +134,7 @@ let t=((cy-by)*(px-cx)+(bx-cx)*(py-cy))/area;
 return s>=0 && t>=0 && (s+t)<=1;
 }
 
+// COLISION
 function collideTriangle(player,tri){
 let size=player.size*HITBOX_SCALE;
 let off=(player.size-size)/2;
@@ -84,83 +156,50 @@ return true;
 return false;
 }
 
-// 🔥 DIFICULTAD CADA 15s
-function getDifficulty(){
-let t=(Date.now()-startTime)/1000;
-return Math.floor(t/15);
-}
-
-// 🧱 GENERADOR
-function generateObstacle(){
-
-let diff=getDifficulty();
-
-let lastX = level.length ? level[level.length-1].x : 1200;
-
-// más difícil = menos espacio
-let gap = 500 - diff*40;
-if(gap<250) gap=250;
-
-let height = 60 + Math.random()*40 + diff*5;
-
-level.push({
-x: lastX + gap,
-h: height
+// EXPLOSION
+function explode(x,y){
+for(let i=0;i<80;i++){
+particles.push({
+x:x,y:y,
+dx:(Math.random()-0.5)*10,
+dy:(Math.random()-0.5)*10,
+life:40
 });
 }
-
-// 🌈 PORTAL CON PLATAFORMA
-function generatePortal(){
-
-let lastX = level.length ? level[level.length-1].x : 2000;
-let x = lastX + 800;
-
-platforms.push({
-x:x,
-y:canvas.height-200,
-w:200,
-h:20
-});
-
-portals.push({
-x:x+100,
-y:canvas.height-230
-});
-
-// espacio seguro después
-level.push({
-x:x+600,
-h:60
-});
 }
 
 // INICIO
 function startGame(){
 
-cameraX=0;
-speed=1;
-alive=true;
-paused=false;
-particles=[];
-level=[];
-platforms=[];
-portals=[];
-startTime=Date.now();
-
-document.getElementById("retry").style.display="none";
-document.getElementById("menu").style.display="none";
+menu.style.display="none";
+canvas.style.display="block";
+pauseBtn.style.display="block";
+menuBtn.style.display="block";
 
 resize();
 
 player={
 x:120,y:0,size:50,dy:0,
 gravity:0.75,jump:-15,
-grounded:false
+grounded:false,rotation:0
 };
 
-// inicial
-for(let i=0;i<8;i++) generateObstacle();
-generatePortal();
+cameraX=0;
+level=[];
+alive=true;
+particles=[];
+patternIndex=0;
+
+let x=1200;
+for(let i=0;i<25;i++){
+x+=pattern[patternIndex%pattern.length];
+patternIndex++;
+
+level.push({x:x,h:60+(i%3)*20});
+}
+
+music.currentTime=0;
+music.play();
 
 game();
 }
@@ -187,72 +226,35 @@ jumpPressed=false;
 
 player.y+=player.dy;
 
-// suelo
 if(player.y+player.size>=ground){
 player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
+player.rotation=0;
 }else{
 player.grounded=false;
+player.rotation+=0.15;
 }
-
-// PLATAFORMAS
-platforms.forEach(p=>{
-let x=p.x-cameraX;
-
-ctx.fillStyle="cyan";
-ctx.fillRect(x,p.y,p.w,p.h);
-
-// colision arriba
-if(player.x+player.size>x && player.x<x+p.w){
-if(player.y+player.size>p.y && player.y+player.size<p.y+20){
-player.y=p.y-player.size;
-player.dy=0;
-player.grounded=true;
-}
-}
-});
-
-// PORTALES
-portals.forEach(p=>{
-let x=p.x-cameraX;
-
-ctx.shadowBlur=30;
-ctx.strokeStyle="yellow";
-
-ctx.beginPath();
-ctx.arc(x,p.y,25,0,Math.PI*2);
-ctx.stroke();
-
-// entrar portal
-if(player.x<x+25 && player.x+player.size>x-25){
-cameraX+=400; // te adelanta
-}
-});
 
 // PLAYER
 if(alive){
+ctx.save();
+ctx.translate(player.x+25,player.y+25);
+ctx.rotate(player.rotation);
+
 ctx.shadowBlur=25;
-ctx.shadowColor="#00ffff";
-ctx.fillStyle="#00ffff";
-ctx.fillRect(player.x,player.y,player.size,player.size);
+ctx.shadowColor=skinColor;
+ctx.fillStyle=skinColor;
+ctx.fillRect(-25,-25,50,50);
+
+ctx.restore();
 }
 
 // OBSTACULOS
-level.forEach((obs,i)=>{
+level.forEach(obs=>{
 let x=obs.x-cameraX;
 let y=ground-obs.h;
 
-// limpiar y generar
-if(x<-100){
-level.splice(i,1);
-generateObstacle();
-
-// cada tanto portal nuevo
-if(Math.random()<0.2) generatePortal();
-}
-
-// dibujo
 ctx.shadowBlur=25;
 ctx.shadowColor="#ff0066";
 ctx.fillStyle="#ff0066";
@@ -267,35 +269,26 @@ let tri={x1:x,y1:ground,x2:x+40,y2:y,x3:x+80,y3:ground};
 
 if(alive && collideTriangle(player,tri)){
 alive=false;
-explode(player.x,player.y);
-setTimeout(()=>{document.getElementById("retry").style.display="block";},300);
+explode(player.x+25,player.y+25);
+music.pause();
+pauseBtn.style.display="none";
+menuBtn.style.display="none";
 }
+});
+
+// PARTICULAS
+particles.forEach((p,i)=>{
+p.x+=p.dx;
+p.y+=p.dy;
+p.life--;
+
+ctx.fillStyle="white";
+ctx.fillRect(p.x,p.y,3,3);
+
+if(p.life<=0) particles.splice(i,1);
 });
 
 requestAnimationFrame(game);
-}
-
-// EXPLOSION
-function explode(x,y){
-for(let i=0;i<50;i++){
-particles.push({
-x,y,
-dx:(Math.random()-0.5)*8,
-dy:(Math.random()-0.5)*8,
-life:40
-});
-}
-}
-
-// REINICIAR
-function restart(){
-startGame();
-}
-
-// PAUSA
-function togglePause(){
-paused=!paused;
-document.getElementById("pauseBtn").innerText=paused?"▶":"⏸";
 }
 </script>
 
