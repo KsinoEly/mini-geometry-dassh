@@ -8,20 +8,9 @@
 <style>
 body{margin:0;background:black;overflow:hidden;font-family:Arial;}
 canvas{display:block;}
-
-#menu{
-position:absolute;width:100%;text-align:center;top:40px;color:white;
-}
-
-button{
-padding:10px;margin:5px;border:none;border-radius:8px;font-size:16px;
-}
-
-#pauseBtn{
-position:fixed;top:10px;right:10px;
-padding:6px 10px;font-size:14px;opacity:0.7;
-}
-
+#menu{text-align:center;color:white;padding-top:40px;}
+button{padding:10px;margin:5px;border:none;border-radius:8px;}
+#pauseBtn{position:fixed;top:10px;right:10px;}
 #retry{
 position:absolute;top:50%;left:50%;
 transform:translate(-50%,-50%);
@@ -33,7 +22,7 @@ display:none;font-size:20px;
 <body>
 
 <div id="menu">
-<h1>Mini Geometry Dash</h1>
+<h1 style="color:white;">Mini Geometry Dash</h1>
 <button onclick="startGame()">JUGAR</button>
 </div>
 
@@ -54,8 +43,42 @@ window.addEventListener("resize",resize);
 
 // VARIABLES
 let player,level,portals;
-let cameraX,speed,startTime,alive,paused,gravityDir;
+let cameraX,speed,startTime,alive,paused;
 let particles=[];
+let gravityDir=1;
+let holding=false;
+
+// PATRONES REALES
+function createLevel(){
+let lvl=[];
+let x=1200;
+
+// patrón simple
+for(let i=0;i<3;i++){
+lvl.push({x:x,h:60});
+x+=700;
+}
+
+// patrón doble salto
+lvl.push({x:x,h:80});
+x+=300;
+lvl.push({x:x,h:80});
+x+=700;
+
+// patrón rápido
+for(let i=0;i<5;i++){
+lvl.push({x:x,h:70});
+x+=350;
+}
+
+// patrón difícil
+for(let i=0;i<6;i++){
+lvl.push({x:x,h:90});
+x+=300;
+}
+
+return lvl;
+}
 
 // INICIO
 function startGame(){
@@ -72,22 +95,20 @@ grounded:false,rotation:0,
 mode:"cube"
 };
 
-gravityDir=1;
 cameraX=0;
-speed=1.1;
+speed=0.8;
 alive=true;
 paused=false;
 startTime=Date.now();
+gravityDir=1;
 
-level=[
-{x:600,h:60},{x:1200,h:80},{x:1800,h:70},
-{x:2600,h:100},{x:3400,h:80},{x:4200,h:120}
-];
+level=createLevel();
 
 portals=[
-{x:1000,type:"gravity"},
-{x:2000,type:"fly"},
-{x:3000,type:"cube"}
+{x:3000,type:"gravity"},
+{x:4500,type:"ship"},
+{x:7000,type:"gravity"},
+{x:8500,type:"cube"}
 ];
 
 particles=[];
@@ -96,58 +117,23 @@ game();
 }
 
 // INPUT
-window.addEventListener("click",jump);
+window.addEventListener("mousedown",()=>holding=true);
+window.addEventListener("mouseup",()=>holding=false);
+window.addEventListener("touchstart",()=>holding=true);
+window.addEventListener("touchend",()=>holding=false);
 window.addEventListener("keydown",e=>{
-if(e.code==="Space") jump();
+if(e.code==="Space") holding=true;
 });
-
-function jump(){
-if(!alive||paused) return;
-
-if(player.mode==="cube"){
-if(player.grounded){
-player.dy=player.jump*gravityDir;
-player.grounded=false;
-}
-}else{
-player.dy=-10;
-}
-}
-
-// PARTICULAS
-function spawnTrail(x,y){
-particles.push({
-x,y,
-dx:(Math.random()-0.5)*2,
-dy:(Math.random()-0.5)*2,
-life:20,
-color:"#00ffff"
+window.addEventListener("keyup",e=>{
+if(e.code==="Space") holding=false;
 });
-}
-
-function explode(x,y){
-for(let i=0;i<40;i++){
-particles.push({
-x,y,
-dx:(Math.random()-0.5)*8,
-dy:(Math.random()-0.5)*8,
-life:40,
-color:"white"
-});
-}
-}
-
-// COLISION
-function hit(px,py,ps, ox,oy,ow,oh){
-return px<ox+ow && px+ps>ox && py<oy+oh && py+ps>oy;
-}
 
 // LOOP
 function game(){
 
 if(paused){requestAnimationFrame(game);return;}
 
-// FONDO NEON
+// FONDO PRO
 let g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);
 g.addColorStop(0,"#0f2027");
 g.addColorStop(1,"#2c5364");
@@ -156,7 +142,7 @@ ctx.fillRect(0,0,canvas.width,canvas.height);
 
 // VELOCIDAD
 let elapsed=(Date.now()-startTime)/1000;
-speed=1.1 + Math.floor(elapsed/10)*0.1;
+speed=0.8 + Math.floor(elapsed/5)*0.08;
 
 cameraX+=speed*6;
 
@@ -165,35 +151,35 @@ let ground=canvas.height-80;
 // FISICA
 if(player.mode==="cube"){
 player.dy+=player.gravity*gravityDir;
+
+if(holding && player.grounded){
+player.dy=player.jump*gravityDir;
+}
+}else if(player.mode==="ship"){
+if(holding){
+player.dy-=0.6;
 }else{
-player.dy+=0.5;
+player.dy+=0.6;
+}
 }
 
 player.y+=player.dy;
 
-// SUELO / TECHO
-if(gravityDir===1){
+// LIMITES
 if(player.y+player.size>=ground){
 player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
-player.rotation=0;
-}else{
-player.rotation+=0.15;
-}
-}else{
-if(player.y<=0){
+}else if(player.y<=0){
 player.y=0;
 player.dy=0;
-player.grounded=true;
-player.rotation=0;
 }else{
-player.rotation+=0.15;
-}
+player.grounded=false;
 }
 
-// TRAIL
-spawnTrail(player.x,player.y);
+// TRAIL PRO
+ctx.fillStyle="rgba(0,255,255,0.15)";
+ctx.fillRect(player.x-15,player.y-15,player.size,player.size);
 
 // PLAYER
 if(alive){
@@ -201,7 +187,7 @@ ctx.save();
 ctx.translate(player.x,player.y);
 ctx.rotate(player.rotation);
 
-ctx.shadowBlur=25;
+ctx.shadowBlur=30;
 ctx.shadowColor="#00ffff";
 ctx.fillStyle="#00ffff";
 ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
@@ -212,43 +198,58 @@ ctx.restore();
 // OBSTACULOS
 level.forEach(obs=>{
 let x=obs.x-cameraX;
-let gy=ground-obs.h;
+let y=ground-obs.h;
 
 ctx.fillStyle="#ff0066";
-ctx.shadowBlur=20;
+ctx.shadowBlur=25;
 ctx.shadowColor="#ff0066";
 
 ctx.beginPath();
 ctx.moveTo(x,ground);
-ctx.lineTo(x+40,gy);
+ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-if(alive && hit(player.x,player.y,player.size,x+10,gy,60,obs.h)){
+// HITBOX
+if(alive &&
+player.x < x+70 &&
+player.x+player.size > x+10 &&
+player.y < ground &&
+player.y+player.size > y
+){
 alive=false;
 explode(player.x,player.y);
-setTimeout(()=>retry.style.display="block",300);
+setTimeout(()=>{document.getElementById("retry").style.display="block";},300);
 }
 });
 
-// PORTALES
+// PORTALES PRO
 portals.forEach(p=>{
 let x=p.x-cameraX;
 
-ctx.shadowBlur=30;
+ctx.shadowBlur=40;
 ctx.strokeStyle=
 p.type==="gravity"?"yellow":
-p.type==="fly"?"lime":"cyan";
+p.type==="ship"?"lime":"cyan";
 
-ctx.lineWidth=5;
 ctx.beginPath();
-ctx.arc(x,canvas.height/2,30,0,Math.PI*2);
+ctx.arc(x,canvas.height/2,35,0,Math.PI*2);
 ctx.stroke();
 
-// ACTIVAR
-if(player.x<x+30 && player.x+player.size>x-30){
+// PARTICULAS PORTAL
+if(Math.random()<0.3){
+particles.push({
+x:x,y:canvas.height/2,
+dx:(Math.random()-0.5)*3,
+dy:(Math.random()-0.5)*3,
+life:20
+});
+}
+
+// ACTIVACION
+if(player.x<x+35 && player.x+player.size>x-35){
 if(p.type==="gravity") gravityDir*=-1;
-if(p.type==="fly") player.mode="fly";
+if(p.type==="ship") player.mode="ship";
 if(p.type==="cube") player.mode="cube";
 }
 });
@@ -259,30 +260,41 @@ p.x+=p.dx;
 p.y+=p.dy;
 p.life--;
 
-ctx.fillStyle=p.color;
-ctx.fillRect(p.x,p.y,3,3);
+ctx.fillStyle="cyan";
+ctx.fillRect(p.x,p.y,4,4);
 
 if(p.life<=0) particles.splice(i,1);
 });
 
 // UI
 ctx.fillStyle="white";
-ctx.shadowBlur=0;
 ctx.fillText("Speed: "+speed.toFixed(1),20,40);
 
 requestAnimationFrame(game);
 }
 
+// EXPLOSION
+function explode(x,y){
+for(let i=0;i<50;i++){
+particles.push({
+x,y,
+dx:(Math.random()-0.5)*8,
+dy:(Math.random()-0.5)*8,
+life:40
+});
+}
+}
+
 // REINICIAR
 function restart(){
-retry.style.display="none";
+document.getElementById("retry").style.display="none";
 startGame();
 }
 
 // PAUSA
 function togglePause(){
 paused=!paused;
-pauseBtn.innerText=paused?"▶":"⏸";
+document.getElementById("pauseBtn").innerText=paused?"▶":"⏸";
 }
 </script>
 
