@@ -42,46 +42,69 @@ canvas.height=window.innerHeight;
 window.addEventListener("resize",resize);
 
 // VARIABLES
-let player,level,portals;
+let player,level;
 let cameraX,speed,startTime,alive,paused;
-let particles=[];
 let gravityDir=1;
 let holding=false;
+let particles=[];
 
-// PATRONES REALES
+// NIVEL
 function createLevel(){
 let lvl=[];
 let x=1200;
 
-// patrón simple
-for(let i=0;i<3;i++){
-lvl.push({x:x,h:60});
-x+=700;
-}
-
-// patrón doble salto
-lvl.push({x:x,h:80});
-x+=300;
-lvl.push({x:x,h:80});
-x+=700;
-
-// patrón rápido
-for(let i=0;i<5;i++){
-lvl.push({x:x,h:70});
-x+=350;
-}
-
-// patrón difícil
-for(let i=0;i<6;i++){
-lvl.push({x:x,h:90});
-x+=300;
-}
+for(let i=0;i<3;i++){lvl.push({x:x,h:60}); x+=700;}
+for(let i=0;i<5;i++){lvl.push({x:x,h:70}); x+=500;}
+for(let i=0;i<6;i++){lvl.push({x:x,h:90}); x+=350;}
 
 return lvl;
 }
 
+// COLISION TRIANGULO REAL
+function pointInTriangle(px,py, ax,ay, bx,by, cx,cy){
+
+let area = (bx-ax)*(cy-ay)-(cx-ax)*(by-ay);
+let s = ((ay-cy)*(px-cx)+(cx-ax)*(py-cy))/area;
+let t = ((cy-by)*(px-cx)+(bx-cx)*(py-cy))/area;
+
+return s>=0 && t>=0 && (s+t)<=1;
+}
+
+// CHECK COLISION EXACTA
+function collideTriangle(player, tri){
+
+let points = [
+{x:player.x, y:player.y},
+{x:player.x+player.size, y:player.y},
+{x:player.x, y:player.y+player.size},
+{x:player.x+player.size, y:player.y+player.size}
+];
+
+for(let p of points){
+if(pointInTriangle(
+p.x,p.y,
+tri.x1,tri.y1,
+tri.x2,tri.y2,
+tri.x3,tri.y3
+)){
+return true;
+}
+}
+return false;
+}
+
 // INICIO
 function startGame(){
+
+cameraX=0;
+speed=0.9;
+startTime=Date.now();
+alive=true;
+paused=false;
+particles=[];
+gravityDir=1;
+
+document.getElementById("retry").style.display="none";
 document.getElementById("menu").style.display="none";
 canvas.style.display="block";
 document.getElementById("pauseBtn").style.display="block";
@@ -91,27 +114,10 @@ resize();
 player={
 x:120,y:0,size:50,dy:0,
 gravity:0.8,jump:-16,
-grounded:false,rotation:0,
-mode:"cube"
+grounded:false,rotation:0
 };
 
-cameraX=0;
-speed=0.8;
-alive=true;
-paused=false;
-startTime=Date.now();
-gravityDir=1;
-
 level=createLevel();
-
-portals=[
-{x:3000,type:"gravity"},
-{x:4500,type:"ship"},
-{x:7000,type:"gravity"},
-{x:8500,type:"cube"}
-];
-
-particles=[];
 
 game();
 }
@@ -119,138 +125,73 @@ game();
 // INPUT
 window.addEventListener("mousedown",()=>holding=true);
 window.addEventListener("mouseup",()=>holding=false);
-window.addEventListener("touchstart",()=>holding=true);
-window.addEventListener("touchend",()=>holding=false);
-window.addEventListener("keydown",e=>{
-if(e.code==="Space") holding=true;
-});
-window.addEventListener("keyup",e=>{
-if(e.code==="Space") holding=false;
-});
+window.addEventListener("keydown",e=>{if(e.code==="Space") holding=true;});
+window.addEventListener("keyup",e=>{if(e.code==="Space") holding=false;});
 
 // LOOP
 function game(){
 
 if(paused){requestAnimationFrame(game);return;}
 
-// FONDO PRO
-let g=ctx.createLinearGradient(0,0,canvas.width,canvas.height);
-g.addColorStop(0,"#0f2027");
-g.addColorStop(1,"#2c5364");
-ctx.fillStyle=g;
+// FONDO
+ctx.fillStyle="#111";
 ctx.fillRect(0,0,canvas.width,canvas.height);
 
-// VELOCIDAD
+// VELOCIDAD CONTROLADA
 let elapsed=(Date.now()-startTime)/1000;
-speed=0.8 + Math.floor(elapsed/5)*0.08;
+speed=0.9 + elapsed*0.01;
+if(speed>1.5) speed=1.5;
 
-cameraX+=speed*6;
+cameraX+=speed*5;
 
 let ground=canvas.height-80;
 
 // FISICA
-if(player.mode==="cube"){
-player.dy+=player.gravity*gravityDir;
-
+player.dy+=player.gravity;
 if(holding && player.grounded){
-player.dy=player.jump*gravityDir;
+player.dy=player.jump;
 }
-}else if(player.mode==="ship"){
-if(holding){
-player.dy-=0.6;
-}else{
-player.dy+=0.6;
-}
-}
-
 player.y+=player.dy;
 
-// LIMITES
 if(player.y+player.size>=ground){
 player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
-}else if(player.y<=0){
-player.y=0;
-player.dy=0;
 }else{
 player.grounded=false;
 }
 
-// TRAIL PRO
-ctx.fillStyle="rgba(0,255,255,0.15)";
-ctx.fillRect(player.x-15,player.y-15,player.size,player.size);
-
 // PLAYER
 if(alive){
-ctx.save();
-ctx.translate(player.x,player.y);
-ctx.rotate(player.rotation);
-
-ctx.shadowBlur=30;
-ctx.shadowColor="#00ffff";
 ctx.fillStyle="#00ffff";
-ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
-
-ctx.restore();
+ctx.fillRect(player.x,player.y,player.size,player.size);
 }
 
-// OBSTACULOS
+// OBSTACULOS CON COLISION REAL
 level.forEach(obs=>{
 let x=obs.x-cameraX;
 let y=ground-obs.h;
 
+// DIBUJO
 ctx.fillStyle="#ff0066";
-ctx.shadowBlur=25;
-ctx.shadowColor="#ff0066";
-
 ctx.beginPath();
 ctx.moveTo(x,ground);
 ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-// HITBOX
-if(alive &&
-player.x < x+70 &&
-player.x+player.size > x+10 &&
-player.y < ground &&
-player.y+player.size > y
-){
+// TRIANGULO REAL
+let tri={
+x1:x, y1:ground,
+x2:x+40, y2:y,
+x3:x+80, y3:ground
+};
+
+// COLISION PERFECTA
+if(alive && collideTriangle(player, tri)){
 alive=false;
 explode(player.x,player.y);
 setTimeout(()=>{document.getElementById("retry").style.display="block";},300);
-}
-});
-
-// PORTALES PRO
-portals.forEach(p=>{
-let x=p.x-cameraX;
-
-ctx.shadowBlur=40;
-ctx.strokeStyle=
-p.type==="gravity"?"yellow":
-p.type==="ship"?"lime":"cyan";
-
-ctx.beginPath();
-ctx.arc(x,canvas.height/2,35,0,Math.PI*2);
-ctx.stroke();
-
-// PARTICULAS PORTAL
-if(Math.random()<0.3){
-particles.push({
-x:x,y:canvas.height/2,
-dx:(Math.random()-0.5)*3,
-dy:(Math.random()-0.5)*3,
-life:20
-});
-}
-
-// ACTIVACION
-if(player.x<x+35 && player.x+player.size>x-35){
-if(p.type==="gravity") gravityDir*=-1;
-if(p.type==="ship") player.mode="ship";
-if(p.type==="cube") player.mode="cube";
 }
 });
 
@@ -259,16 +200,10 @@ particles.forEach((p,i)=>{
 p.x+=p.dx;
 p.y+=p.dy;
 p.life--;
-
-ctx.fillStyle="cyan";
-ctx.fillRect(p.x,p.y,4,4);
-
+ctx.fillStyle="white";
+ctx.fillRect(p.x,p.y,3,3);
 if(p.life<=0) particles.splice(i,1);
 });
-
-// UI
-ctx.fillStyle="white";
-ctx.fillText("Speed: "+speed.toFixed(1),20,40);
 
 requestAnimationFrame(game);
 }
@@ -287,7 +222,6 @@ life:40
 
 // REINICIAR
 function restart(){
-document.getElementById("retry").style.display="none";
 startGame();
 }
 
