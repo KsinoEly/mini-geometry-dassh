@@ -2,268 +2,272 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mini Geometry Dash</title>
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{overflow:hidden;background:black;font-family:Arial;}
-canvas{display:block;}
-
-#rotate{
-  position:fixed;
-  width:100%;
-  height:100%;
-  background:black;
-  color:white;
-  display:none;
-  justify-content:center;
-  align-items:center;
-  font-size:28px;
-  z-index:10;
+body{margin:0;background:#000;color:#fff;font-family:Arial;text-align:center;}
+button{padding:10px;margin:5px;border:none;border-radius:8px;font-size:16px;}
+canvas{display:none;}
+#menu{padding-top:40px;}
+#pauseBtn{
+position:fixed;
+top:10px;
+right:10px;
+font-size:14px;
+padding:6px 10px;
+opacity:0.7;
 }
-
-@media (orientation:portrait){
-  #rotate{display:flex;}
-  canvas{display:none;}
+#retry{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+display:none;
 }
 </style>
 </head>
 
 <body>
 
-<div id="rotate">🔄 Girá el celular</div>
+<div id="menu">
+<h1>Mini Geometry Dash</h1>
+
+<h2>Skins</h2>
+<button onclick="setSkin('cyan')">Cyan</button>
+<button onclick="setSkin('red')">Rojo</button>
+<button onclick="setSkin('yellow')">Amarillo</button>
+
+<h2>Niveles</h2>
+<button onclick="startGame('normal')">Nivel Normal</button>
+<button onclick="startGame('ia')">Nivel IA</button>
+
+<h2>Ranking</h2>
+<div id="ranking"></div>
+</div>
+
+<button id="pauseBtn" onclick="togglePause()" style="display:none;">⏸</button>
+<button id="retry" onclick="restart()">REINTENTAR</button>
+
 <canvas id="game"></canvas>
 
 <audio id="music" loop>
-  <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3">
+<source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3">
 </audio>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const music = document.getElementById("music");
+let canvas=document.getElementById("game");
+let ctx=canvas.getContext("2d");
+let music=document.getElementById("music");
+
+let skin="cyan";
+let coins=parseInt(localStorage.getItem("coins")||0);
+
+let player,level,portals;
+let cameraX,speed,gravityDir,alive,paused,startTime;
 
 function resize(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
 }
-window.addEventListener("resize", resize);
+window.addEventListener("resize",resize);
+
+// SKIN
+function setSkin(s){skin=s;}
+
+// INICIO
+function startGame(type){
+document.getElementById("menu").style.display="none";
+canvas.style.display="block";
+document.getElementById("pauseBtn").style.display="block";
+
 resize();
 
-// PLAYER
-const player = {
-  x:120,y:0,size:50,dy:0,
-  gravity:0.8,jump:-16,
-  grounded:false,rotation:0,
-  mode:"cube"
-};
+player={x:120,y:0,size:50,dy:0,gravity:0.8,jump:-16,grounded:false,rotation:0,mode:"cube"};
+gravityDir=1;
+cameraX=0;
+speed=1.1;
+alive=true;
+paused=false;
+startTime=Date.now();
 
-let gravityDir = 1;
-let cameraX = 0;
-let speed = 6;
-let alive = true;
-
-// NIVEL
-const level = [
-  {x:600,h:60},{x:900,h:90},{x:1300,h:70},
-  {x:1800,h:110},{x:2300,h:80},{x:2800,h:120}
+// NIVEL NORMAL
+level=[
+{x:600,h:60},{x:1000,h:80},{x:1500,h:70},
+{x:2000,h:100},{x:2600,h:80},{x:3200,h:120}
 ];
 
-// PORTALES
-const portals = [
-  {x:1000,type:"gravity"},
-  {x:1600,type:"fly"},
-  {x:2100,type:"gravity"},
-  {x:2600,type:"cube"}
+// NIVEL IA (random inteligente)
+if(type==="ia"){
+level=[];
+let x=600;
+for(let i=0;i<20;i++){
+level.push({x:x,h:50+Math.random()*100});
+x+=400+Math.random()*200;
+}
+}
+
+portals=[
+{x:1200,type:"gravity"},
+{x:2000,type:"fly"},
+{x:2600,type:"cube"}
 ];
 
-// EFECTOS
-let particles = [];
-let trail = [];
+music.currentTime=0;
+music.play();
+
+game();
+}
 
 // INPUT
+window.addEventListener("click",jump);
+window.addEventListener("keydown",e=>{if(e.code==="Space")jump();});
+
 function jump(){
-  if(!alive) return;
+if(!alive||paused)return;
 
-  if(player.mode==="cube"){
-    if(player.grounded){
-      player.dy = player.jump * gravityDir;
-    }
-  } else {
-    player.dy = -10;
-  }
-  music.play();
+if(player.mode==="cube"){
+if(player.grounded) player.dy=player.jump*gravityDir;
+}else{
+player.dy=-10;
 }
-window.addEventListener("click", jump);
-window.addEventListener("touchstart", jump);
-window.addEventListener("keydown", e=>{
-  if(e.code==="Space") jump();
-});
-
-// PARTICULAS
-function explode(x,y){
-  for(let i=0;i<30;i++){
-    particles.push({
-      x,y,
-      dx:(Math.random()-0.5)*8,
-      dy:(Math.random()-0.5)*8,
-      life:40
-    });
-  }
 }
 
 // LOOP
 function game(){
 
-  // FONDO
-  let g = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
-  g.addColorStop(0,"#0f2027");
-  g.addColorStop(1,"#2c5364");
-  ctx.fillStyle=g;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+if(paused){requestAnimationFrame(game);return;}
 
-  if(alive) cameraX += speed;
+ctx.fillStyle="#111";
+ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  let ground = canvas.height - 80;
+let ground=canvas.height-80;
 
-  // FISICA
-  if(player.mode==="cube"){
-    player.dy += player.gravity * gravityDir;
-  } else {
-    player.dy += 0.5;
-  }
+// VELOCIDAD PROGRESIVA
+let elapsed=(Date.now()-startTime)/1000;
+speed=1.1 + Math.floor(elapsed/10)*0.1;
 
-  player.y += player.dy;
+cameraX+=speed*5;
 
-  if(gravityDir===1){
-    if(player.y + player.size >= ground){
-      player.y = ground - player.size;
-      player.dy = 0;
-      player.grounded = true;
-      player.rotation = 0;
-    } else {
-      player.grounded = false;
-      player.rotation += 0.15;
-    }
-  } else {
-    if(player.y <= 0){
-      player.y = 0;
-      player.dy = 0;
-      player.grounded = true;
-      player.rotation = 0;
-    } else {
-      player.grounded = false;
-      player.rotation += 0.15;
-    }
-  }
+// FISICA
+if(player.mode==="cube"){
+player.dy+=player.gravity*gravityDir;
+}else{
+player.dy+=0.5;
+}
+player.y+=player.dy;
 
-  // TRAIL
-  trail.push({x:player.x,y:player.y});
-  if(trail.length>15) trail.shift();
-
-  trail.forEach((t,i)=>{
-    ctx.fillStyle="rgba(0,255,255,"+(i/15)+")";
-    ctx.fillRect(t.x,t.y,player.size,player.size);
-  });
-
-  // PLAYER
-  if(alive){
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.rotation);
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = "#00ffff";
-    ctx.fillStyle = "#00ffff";
-    ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
-    ctx.restore();
-  }
-
-  // OBSTACULOS
-  level.forEach(obs=>{
-    let x = obs.x - cameraX;
-
-    ctx.fillStyle="#ff0066";
-    ctx.shadowBlur=20;
-    ctx.shadowColor="#ff0066";
-
-    ctx.beginPath();
-    ctx.moveTo(x, ground);
-    ctx.lineTo(x+40, ground-obs.h);
-    ctx.lineTo(x+80, ground);
-    ctx.fill();
-
-    if(alive &&
-      player.x < x+80 &&
-      player.x + player.size > x &&
-      player.y < ground &&
-      player.y + player.size > ground-obs.h
-    ){
-      alive = false;
-      explode(player.x, player.y);
-      setTimeout(reset,1500);
-    }
-  });
-
-  // PORTALES
-  portals.forEach(p=>{
-    let x = p.x - cameraX;
-
-    ctx.shadowBlur=30;
-    ctx.strokeStyle =
-      p.type==="gravity"?"yellow":
-      p.type==="fly"?"lime":"cyan";
-
-    ctx.lineWidth=5;
-    ctx.beginPath();
-    ctx.arc(x, canvas.height/2, 30, 0, Math.PI*2);
-    ctx.stroke();
-
-    if(alive &&
-      player.x < x+30 &&
-      player.x + player.size > x-30
-    ){
-      if(p.type==="gravity") gravityDir *= -1;
-      if(p.type==="fly") player.mode="fly";
-      if(p.type==="cube") player.mode="cube";
-    }
-  });
-
-  // PARTICULAS
-  particles.forEach((p,i)=>{
-    p.x += p.dx;
-    p.y += p.dy;
-    p.life--;
-
-    ctx.fillStyle="white";
-    ctx.fillRect(p.x,p.y,4,4);
-
-    if(p.life<=0) particles.splice(i,1);
-  });
-
-  // UI
-  ctx.fillStyle="white";
-  ctx.font="bold 40px Arial";
-  ctx.fillText("Mini Geometry Dash",20,50);
-
-  ctx.font="bold 28px Arial";
-  ctx.fillText("Score: "+Math.floor(cameraX/100),20,90);
-
-  requestAnimationFrame(game);
+if(gravityDir===1){
+if(player.y+player.size>=ground){
+player.y=ground-player.size;
+player.dy=0;
+player.grounded=true;
+player.rotation=0;
+}else{
+player.rotation+=0.1;
+}
+}else{
+if(player.y<=0){
+player.y=0;
+player.dy=0;
+player.grounded=true;
+player.rotation=0;
+}else{
+player.rotation+=0.1;
+}
 }
 
-// RESET
-function reset(){
-  cameraX=0;
-  player.y=0;
-  player.dy=0;
-  gravityDir=1;
-  player.mode="cube";
-  alive=true;
+// COLOR
+let color=skin==="cyan"?"#00ffff":skin==="red"?"#ff4444":"#ffff00";
+
+// PLAYER
+ctx.save();
+ctx.translate(player.x,player.y);
+ctx.rotate(player.rotation);
+ctx.fillStyle=color;
+ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
+ctx.restore();
+
+// OBSTACULOS
+level.forEach(obs=>{
+let x=obs.x-cameraX;
+
+ctx.fillStyle="#ff0066";
+ctx.beginPath();
+ctx.moveTo(x,ground);
+ctx.lineTo(x+40,ground-obs.h);
+ctx.lineTo(x+80,ground);
+ctx.fill();
+
+if(
+player.x<x+80 &&
+player.x+player.size>x &&
+player.y<ground &&
+player.y+player.size>ground-obs.h
+){
+endGame();
+}
+});
+
+// PORTALES
+portals.forEach(p=>{
+let x=p.x-cameraX;
+
+ctx.strokeStyle=p.type==="gravity"?"yellow":p.type==="fly"?"lime":"cyan";
+ctx.beginPath();
+ctx.arc(x,canvas.height/2,30,0,Math.PI*2);
+ctx.stroke();
+
+if(player.x<x+30 && player.x+player.size>x-30){
+if(p.type==="gravity") gravityDir*=-1;
+if(p.type==="fly") player.mode="fly";
+if(p.type==="cube") player.mode="cube";
+}
+});
+
+// UI
+ctx.fillStyle="white";
+ctx.fillText("Speed: "+speed.toFixed(1),20,40);
+
+if(alive) requestAnimationFrame(game);
 }
 
-// START
-game();
+// FIN
+function endGame(){
+alive=false;
+saveScore(Math.floor(cameraX/10));
+document.getElementById("retry").style.display="block";
+}
+
+// REINICIAR
+function restart(){
+document.getElementById("retry").style.display="none";
+startGame("normal");
+}
+
+// PAUSA
+function togglePause(){
+paused=!paused;
+document.getElementById("pauseBtn").innerText=paused?"▶":"⏸";
+}
+
+// RANKING (BASE PARA ONLINE)
+function saveScore(score){
+let r=JSON.parse(localStorage.getItem("ranking")||"[]");
+r.push(score);
+r.sort((a,b)=>b-a);
+r=r.slice(0,5);
+localStorage.setItem("ranking",JSON.stringify(r));
+showRanking();
+}
+
+function showRanking(){
+let r=JSON.parse(localStorage.getItem("ranking")||"[]");
+document.getElementById("ranking").innerHTML=
+r.map(s=>"<div>"+s+"</div>").join("");
+}
+
+showRanking();
 </script>
 
 </body>
