@@ -8,24 +8,30 @@
 <style>
 body{margin:0;background:black;font-family:Arial;}
 canvas{display:none;}
-#menu,#skinsMenu,#pauseMenu{
+
+#menu,#skinsMenu,#pauseMenu,#gameOver{
 position:absolute;width:100%;height:100%;
 display:flex;flex-direction:column;
 align-items:center;justify-content:center;
 color:white;
 }
+
 button{
 padding:12px 20px;margin:8px;
 border:none;border-radius:8px;
 font-size:16px;cursor:pointer;
 }
+
 #pauseBtn{position:fixed;top:10px;right:10px;display:none;}
 #menuBtn{position:fixed;top:10px;left:10px;display:none;}
+
 .skin{
 width:40px;height:40px;margin:5px;
 display:inline-block;cursor:pointer;
 border:2px solid white;
 }
+
+#gameOver{display:none;font-size:30px;}
 </style>
 </head>
 
@@ -49,6 +55,11 @@ border:2px solid white;
 <button onclick="goMenu()">MENÚ</button>
 </div>
 
+<div id="gameOver">
+<h1>GAME OVER</h1>
+<button onclick="startGame()">REINTENTAR</button>
+</div>
+
 <button id="pauseBtn" onclick="pauseGame()">⏸</button>
 <button id="menuBtn" onclick="goMenu()">🏠</button>
 
@@ -64,14 +75,13 @@ canvas.height=window.innerHeight;
 }
 window.addEventListener("resize",resize);
 
-// VARIABLES
 let player,level=[],cameraX=0,speed=1;
 let alive=true,paused=false;
 let jumpPressed=false;
 let skinColor="#00ffff";
 let particles=[];
 
-// 🔴 SKINS (AGREGADO ROJO)
+// SKINS
 const skinList=["#00ffff","#ff0066","#00ff00","#ffff00","#ff9900","#ff0000"];
 const skinsDiv=document.getElementById("skins");
 
@@ -79,9 +89,7 @@ skinList.forEach(color=>{
 let d=document.createElement("div");
 d.className="skin";
 d.style.background=color;
-d.onclick=()=>{
-skinColor=color;
-}
+d.onclick=()=>skinColor=color;
 skinsDiv.appendChild(d);
 });
 
@@ -93,44 +101,39 @@ if(e.code==="Space") jumpPressed=true;
 });
 
 // MENUS
-function openSkins(){
-menu.style.display="none";
-skinsMenu.style.display="flex";
-}
-function backToMenu(){
-skinsMenu.style.display="none";
-menu.style.display="flex";
-}
+function openSkins(){menu.style.display="none";skinsMenu.style.display="flex";}
+function backToMenu(){skinsMenu.style.display="none";menu.style.display="flex";}
 function goMenu(){
 paused=false;
 canvas.style.display="none";
 pauseMenu.style.display="none";
+gameOver.style.display="none";
 menu.style.display="flex";
 pauseBtn.style.display="none";
 menuBtn.style.display="none";
 }
-function pauseGame(){
-paused=true;
-pauseMenu.style.display="flex";
+function pauseGame(){paused=true;pauseMenu.style.display="flex";}
+function resume(){paused=false;pauseMenu.style.display="none";}
+
+// 💥 EXPLOSION CUADRADOS
+function explode(x,y){
+for(let i=0;i<80;i++){
+particles.push({
+x:x,y:y,
+dx:(Math.random()-0.5)*12,
+dy:(Math.random()-0.5)*12,
+life:50,
+size:4+Math.random()*4
+});
 }
-function resume(){
-paused=false;
-pauseMenu.style.display="none";
 }
 
-// 🔥 COLISION REAL (RECTANGULO VS TRIANGULO)
-function collide(player, x,y){
-let px=player.x;
-let py=player.y;
-let s=player.size;
+// COLISION
+function collide(player,x,y){
+let px=player.x, py=player.y, s=player.size;
 
-// bounding box primero (rápido)
 if(px+s < x || px > x+80) return false;
-
-// contacto real con base del triángulo
-if(py+s >= y && px+s > x && px < x+80){
-return true;
-}
+if(py+s >= y && px+s > x && px < x+80) return true;
 
 return false;
 }
@@ -139,29 +142,22 @@ return false;
 function startGame(){
 
 menu.style.display="none";
+gameOver.style.display="none";
 canvas.style.display="block";
 pauseBtn.style.display="block";
 menuBtn.style.display="block";
 
 resize();
 
-player={
-x:120,y:0,size:50,dy:0,
-gravity:0.75,jump:-15,
-grounded:false,rotation:0
-};
+player={x:120,y:0,size:50,dy:0,gravity:0.75,jump:-15,grounded:false,rotation:0};
 
 cameraX=0;
 level=[];
 alive=true;
 particles=[];
 
-// nivel simple
 for(let i=0;i<20;i++){
-level.push({
-x:1200+i*400,
-h:60+Math.random()*40
-});
+level.push({x:1200+i*400,h:60+Math.random()*40});
 }
 
 game();
@@ -205,7 +201,7 @@ ctx.save();
 ctx.translate(player.x+25,player.y+25);
 ctx.rotate(player.rotation);
 
-ctx.shadowBlur=25;
+ctx.shadowBlur=30;
 ctx.shadowColor=skinColor;
 ctx.fillStyle=skinColor;
 ctx.fillRect(-25,-25,50,50);
@@ -213,12 +209,11 @@ ctx.fillRect(-25,-25,50,50);
 ctx.restore();
 }
 
-// OBSTACULOS + MUERTE REAL
+// OBSTACULOS
 level.forEach(obs=>{
 let x=obs.x-cameraX;
 let y=ground-obs.h;
 
-// dibujo
 ctx.shadowBlur=25;
 ctx.shadowColor="#ff0066";
 ctx.fillStyle="#ff0066";
@@ -229,12 +224,32 @@ ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-// 🔥 MUERE SI TOCA
+// 💀 MUERTE
 if(alive && collide(player,x,y)){
 alive=false;
+explode(player.x+25,player.y+25);
 pauseBtn.style.display="none";
 menuBtn.style.display="none";
+
+// mostrar game over
+setTimeout(()=>{
+gameOver.style.display="flex";
+},400);
 }
+});
+
+// 💥 PARTICULAS
+particles.forEach((p,i)=>{
+p.x+=p.dx;
+p.y+=p.dy;
+p.life--;
+
+ctx.shadowBlur=20;
+ctx.shadowColor=skinColor;
+ctx.fillStyle=skinColor;
+ctx.fillRect(p.x,p.y,p.size,p.size);
+
+if(p.life<=0) particles.splice(i,1);
 });
 
 requestAnimationFrame(game);
