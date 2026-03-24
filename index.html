@@ -75,13 +75,14 @@ canvas.height=window.innerHeight;
 }
 window.addEventListener("resize",resize);
 
-let player,level=[],cameraX=0,speed=1;
+let player,level=[],cameraX=0;
+const FIXED_SPEED = 5; // 🔥 velocidad REAL fija
 let alive=true,paused=false;
 let jumpPressed=false;
 let skinColor="#00ffff";
 let particles=[];
 
-// SKINS (incluye rojo)
+// SKINS
 const skinList=["#00ffff","#ff0066","#00ff00","#ffff00","#ff9900","#ff0000"];
 const skinsDiv=document.getElementById("skins");
 
@@ -149,18 +150,16 @@ menuBtn.style.display="block";
 
 resize();
 
-speed=1; // 🔥 velocidad fija siempre
-
 player={
 x:120,
 y:0,
 size:50,
 dy:0,
 gravity:0.75,
-jump:-18, // 🔥 salto más alto
+jump:-18,
 grounded:false,
 rotation:0,
-jumps:0 // 🔥 doble salto
+jumps:0
 };
 
 cameraX=0;
@@ -183,14 +182,14 @@ if(paused){requestAnimationFrame(game);return;}
 ctx.fillStyle="#111";
 ctx.fillRect(0,0,canvas.width,canvas.height);
 
-cameraX+=speed*5;
+// 🔥 VELOCIDAD BLOQUEADA
+cameraX += FIXED_SPEED;
 
 let ground=canvas.height-80;
 
 // FISICA
 player.dy+=player.gravity;
 
-// 🔥 DOBLE SALTO
 if(jumpPressed && player.jumps < 2){
 player.dy=player.jump;
 player.jumps++;
@@ -204,7 +203,7 @@ player.y=ground-player.size;
 player.dy=0;
 player.grounded=true;
 player.rotation=0;
-player.jumps=0; // reset salto
+player.jumps=0;
 }else{
 player.grounded=false;
 player.rotation+=0.15;
@@ -239,7 +238,6 @@ ctx.lineTo(x+40,y);
 ctx.lineTo(x+80,ground);
 ctx.fill();
 
-// MUERTE
 if(alive && collide(player,x,y)){
 alive=false;
 explode(player.x+25,player.y+25);
